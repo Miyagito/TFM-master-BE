@@ -1,1 +1,19 @@
+# Ignorar directorios de node_modules
+node_modules/
+
+# Ignorar archivos de lock de npm
+package-lock.json
+
+# Opcional: Ignorar archivos de configuración del editor o IDE específicos
+*.idea/
+*.vscode/
+
+# Opcional: Ignorar archivos de logs si decides guardarlos en el repositorio
+*.log
+
+# Opcional: Ignorar archivos temporales que pueden ser generados
+*.tmp
+*.temp
+
+# Opcional: Ignorar archivos de ambiente
 .env
