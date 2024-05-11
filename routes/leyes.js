@@ -2,10 +2,26 @@ const express = require("express");
 const router = express.Router();
 const leyesController = require("../controllers/leyesController");
 const authenticateToken = require("../middleware/authenticateToken");
+const authorizeRoles = require("../middleware/authorizeRoles");
 
-router.post("/", leyesController.addLey);
 router.get("/", leyesController.getAllLeyes);
-router.put("/:id", authenticateToken, leyesController.updateLey);
-router.delete("/:id", authenticateToken, leyesController.deleteLey);
+router.post(
+  "/",
+  authenticateToken,
+  authorizeRoles("admin"),
+  leyesController.addLey
+);
+router.put(
+  "/:id",
+  authenticateToken,
+  authorizeRoles("admin"),
+  leyesController.updateLey
+);
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRoles("admin"),
+  leyesController.deleteLey
+);
 
 module.exports = router;
