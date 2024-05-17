@@ -43,6 +43,12 @@ router.post("/login", async (req, res) => {
   });
 });
 
+// Ruta de logout
+router.post("/logout", (req, res) => {
+  res.clearCookie("jwt");
+  res.status(200).json({ message: "Sesión cerrada con éxito" });
+});
+
 router.get("/verify-session", authenticateToken, (req, res) => {
   // Si el middleware de autenticación pasa, enviar de vuelta el usuario
   res.status(200).json({ user: req.user });

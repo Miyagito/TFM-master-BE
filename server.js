@@ -1,11 +1,15 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const bodyParser = require("body-parser"); // Asegúrate de tener esto
 const db = require("./db/index");
 const authRoutes = require("./routes/auth");
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+app.use(bodyParser.json({ limit: "50mb" }));
+app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
 
 // Configuración correcta de CORS para aceptar cookies
 app.use(
@@ -15,9 +19,9 @@ app.use(
   })
 );
 
-// Middleware
 app.use(express.json());
-app.use(cookieParser()); // Añadir cookie-parser al middleware
+app.use(cookieParser());
+
 app.use(authRoutes);
 
 db.connect((err) => {
@@ -33,7 +37,6 @@ db.connect((err) => {
 const routes = require("./routes/index");
 app.use("/api", routes);
 
-// Manejo de errores global
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).send("¡Algo salió mal!");
