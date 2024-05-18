@@ -30,8 +30,8 @@ router.delete(
 
 router.post(
   "/scrape",
-  /*   authenticateToken,
-  authorizeRoles("admin"), */
+  authenticateToken,
+  authorizeRoles("admin"),
   scrapeController.scrapeLey
 );
 
