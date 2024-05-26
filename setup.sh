@@ -10,10 +10,20 @@
 
 
 # Set up the database
-mysql -u root -p < setup.sql
+echo "Setting up the database..."
+mysql -u root -p < setup.sql || { echo 'Database setup failed' ; exit 1; }
 
-# Install npm dependencies and start the project
-cd /src
-npm install
-npm start
+echo "Database setup completed successfully."
+
+# Install npm dependencies
+echo "Installing npm dependencies..."
+npm install || { echo 'Failed to install npm dependencies'; exit 1; }
+
+echo "Npm dependencies installed successfully."
+
+# Start the project
+echo "Starting the server..."
+node server.js || { echo 'Failed to start the server'; exit 1; }
+
+echo "Server started successfully."
 
