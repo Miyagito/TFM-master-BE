@@ -88,7 +88,7 @@ exports.updateOposicion = (req, res) => {
   } = req.body;
 
   // Sanitizar el contenido HTML del campo temario
-  temario = DOMPurify.sanitize(temario);
+  const sanitizedTemario = DOMPurify.sanitize(temario);
 
   const sql = `
     UPDATE Oposiciones SET 
@@ -109,7 +109,7 @@ exports.updateOposicion = (req, res) => {
       nombre,
       url_publicacion,
       fecha_publicacion,
-      temario,
+      sanitizedTemario, // Usar el temario sanitizado
       fecha_inicio_instancias,
       fecha_fin_instancias,
       url_instancias,
