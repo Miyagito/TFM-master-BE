@@ -1,15 +1,16 @@
 const scrapeBOE = require("../scraping/scrapingFlow");
 
 exports.scrapeLey = async (req, res) => {
-  const { url, nombreLey } = req.body;
-  if (!url || !nombreLey) {
+  const { url } = req.body;
+
+  if (!url) {
     return res
       .status(400)
-      .json({ error: "URL y Nombre de Ley son requeridos" });
+      .json({ error: "La URL es requerida para el scraping" });
   }
 
   try {
-    const data = await scrapeBOE(url, nombreLey);
+    const data = await scrapeBOE(url);
     res.status(200).json({
       message: "Datos extraídos con éxito",
       data,

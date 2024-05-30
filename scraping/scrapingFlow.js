@@ -1,81 +1,74 @@
 const puppeteer = require("puppeteer");
 
-async function scrapeBOE(url, nombreLey) {
-  const browser = await puppeteer.launch({ headless: false }); // Modo no headless para visualizar el navegador
+async function scrapeBOE(url) {
+  const browser = await puppeteer.launch({ headless: true });
   const page = await browser.newPage();
-
   await page.goto(url, { waitUntil: "networkidle2" });
 
   try {
-    await page.waitForSelector("#docBOE", { visible: true });
-    await page.type("#docBOE", nombreLey);
-    await page.waitForSelector('input[type="submit"][value="Buscar"]', {
-      visible: true,
-    });
-    await page.click('input[type="submit"][value="Buscar"]');
-    await page.waitForNavigation({
-      waitUntil: "domcontentloaded",
-      timeout: 60000,
-    });
-
-    // Esperar que los resultados estén visibles
-    await page.waitForSelector("li.resultado-busqueda", { visible: true });
-
-    // Evaluar los resultados para encontrar el enlace correcto
-    const resultUrl = await page.evaluate((leyBuscada) => {
-      const items = Array.from(
-        document.querySelectorAll("li.resultado-busqueda")
-      );
-      for (let item of items) {
-        const descripcion = item.querySelector("p")?.innerText;
-        if (descripcion && descripcion.includes(leyBuscada)) {
-          const link = item.querySelector("a");
-          return link ? link.href : null;
-        }
+    const waitForSelectorIgnoreError = async (selector) => {
+      try {
+        await page.waitForSelector(selector, { visible: true });
+      } catch (error) {
+        return null; // Devuelve null en caso de error
       }
-      return null;
-    }, nombreLey);
+    };
 
-    if (resultUrl) {
-      await page.goto(resultUrl, { waitUntil: "networkidle2" });
+    await Promise.race([
+      waitForSelectorIgnoreError(".documento-tit"),
+      waitForSelectorIgnoreError(".documento-subtit"),
+      waitForSelectorIgnoreError(
+        'a[target="_blank"][title="Abre el PDF en una nueva ventana"]'
+      ),
+    ]);
 
-      // Extraer información del documento de forma estructurada
-      const ley = await page.evaluate(() => {
-        const estructura = [];
-        const elementos = document.querySelectorAll(
-          ".titulo, .titulo_num, .titulo_tit, .capitulo_num, .capitulo_tit, .articulo"
-        );
+    const isLoaded = await page.evaluate(() => {
+      const tit = document.querySelector(".documento-tit");
+      const subtit = document.querySelector(".documento-subtit");
+      const pdfLink = document.querySelector(
+        'a[target="_blank"][title="Abre el PDF en una nueva ventana"]'
+      );
+      return !!tit || !!subtit || !!pdfLink; // Devuelve true si alguno existe
+    });
 
-        elementos.forEach((elemento) => {
-          const tipo = elemento.className;
-          const texto = elemento.innerText;
-          const contenido = [];
+    if (!isLoaded) {
+      throw new Error("Ningún elemento necesario se cargó correctamente.");
+    }
 
-          let siguienteElemento = elemento.nextElementSibling;
+    // Extraer el nombre de la ley y su estructura documental
+    const ley = await page.evaluate(() => {
+      const nombreLey = document.querySelector(".documento-tit")?.innerText;
+      const estructura = [];
+      const elementos = document.querySelectorAll(
+        ".titulo, .titulo_num, .titulo_tit, .capitulo_num, .capitulo_tit, .articulo"
+      );
 
-          while (
-            siguienteElemento &&
-            (siguienteElemento.className === "parrafo" ||
-              siguienteElemento.className === "parrafo_2")
-          ) {
-            contenido.push({
-              tipo: siguienteElemento.className,
-              texto: siguienteElemento.innerText,
-            });
-            siguienteElemento = siguienteElemento.nextElementSibling;
-          }
+      elementos.forEach((elemento) => {
+        const tipo = elemento.className;
+        const texto = elemento.innerText;
+        const contenido = [];
 
-          estructura.push({ tipo, texto, contenido });
-        });
+        let siguienteElemento = elemento.nextElementSibling;
+        while (
+          siguienteElemento &&
+          (siguienteElemento.className === "parrafo" ||
+            siguienteElemento.className === "parrafo_2")
+        ) {
+          contenido.push({
+            tipo: siguienteElemento.className,
+            texto: siguienteElemento.innerText,
+          });
+          siguienteElemento = siguienteElemento.nextElementSibling;
+        }
 
-        return estructura;
+        estructura.push({ tipo, texto, contenido });
       });
 
-      await browser.close();
-      return ley;
-    } else {
-      throw new Error("No se encontró el documento correspondiente.");
-    }
+      return { nombreLey, estructura }; // Devolver tanto el nombre como la estructura
+    });
+
+    await browser.close();
+    return ley;
   } catch (error) {
     console.error("Error durante el scraping:", error);
     await browser.close();
