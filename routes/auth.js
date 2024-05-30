@@ -28,17 +28,24 @@ router.post("/login", async (req, res) => {
 
         // Configuración de la cookie
         res.cookie("jwt", accessToken, {
-          httpOnly: true, // La cookie solo es accesible por el servidor
-          secure: process.env.NODE_ENV === "production", // En producción, enviar la cookie solo sobre HTTPS
-          maxAge: 24 * 60 * 60 * 1000, // 24 horas en milisegundos
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 24 * 60 * 60 * 1000, // 24 horas
         });
 
-        res.status(200).json({ role: user.tipo_usuario });
+        // Aquí se incluye el nombre de usuario y el rol en la respuesta
+        res.status(200).json({
+          message: "Autenticación exitosa",
+          data: {
+            role: user.tipo_usuario,
+            username: user.username, // Incluye el nombre de usuario
+          },
+        });
       } else {
-        res.status(401).send("Credenciales no válidas");
+        res.status(401).json({ message: "Credenciales no válidas" });
       }
     } else {
-      res.status(404).send("Usuario no encontrado");
+      res.status(404).json({ message: "Usuario no encontrado" });
     }
   });
 });
