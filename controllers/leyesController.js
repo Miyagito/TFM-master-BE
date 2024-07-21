@@ -4,7 +4,7 @@ const logger = require("../logs/loggers");
 exports.addLey = (req, res) => {
   const { nombre, url, contenido } = req.body;
 
-  // Primero verificar si la ley ya existe
+  // Verificar si la ley ya existe
   const sqlExist = "SELECT id FROM Leyes WHERE nombre = ?";
   db.query(sqlExist, [nombre], (err, results) => {
     if (err) {
@@ -17,17 +17,17 @@ exports.addLey = (req, res) => {
     }
 
     if (results.length > 0) {
-      // La ley ya existe, actualizarla
+      // La ley ya existe, actualizar la URL y su estructura
       const leyId = results[0].id;
       const sqlUpdate = "UPDATE Leyes SET url = ? WHERE id = ?";
-      db.query(sqlUpdate, [url, leyId], (err, result) => {
+      db.query(sqlUpdate, [url, leyId], (err) => {
         if (err) {
           logger.error(`Error al actualizar la ley: ${err.message}`);
           return res
             .status(500)
             .send({ error: "Error al actualizar la ley: " + err.message });
         }
-        updateEstructuraLey(leyId, contenido, res);
+        updateEstructuraLey(leyId, contenido, res); // Actualizar la estructura de la ley
       });
     } else {
       // La ley no existe, insertar nueva ley
@@ -40,62 +40,105 @@ exports.addLey = (req, res) => {
             .send({ error: "Error al añadir la ley: " + err.message });
         }
         const leyId = result.insertId;
-        updateEstructuraLey(leyId, contenido, res);
+        updateEstructuraLey(leyId, contenido, res); // Insertar la nueva estructura de la ley
       });
     }
   });
 };
 
 function updateEstructuraLey(leyId, contenido, res) {
-  const insertEstructura = async (items, parentId = null) => {
-    for (const item of items) {
-      const { tipo, texto, contenido: subContenido } = item;
-      const sqlEstructura =
-        "INSERT INTO EstructuraLeyes (ley_id, parent_id, tipo, contenido) VALUES (?, ?, ?, ?)";
-
-      try {
-        const [result] = await db
-          .promise()
-          .query(sqlEstructura, [leyId, parentId, tipo, texto]);
-        const newParentId = result.insertId;
-
-        if (subContenido && subContenido.length > 0) {
-          await insertEstructura(subContenido, newParentId);
-        }
-      } catch (err) {
-        logger.error(`Error al añadir la estructura de la ley: ${err.message}`);
-        throw new Error(err.message);
-      }
-    }
-  };
-
-  insertEstructura(contenido)
+  deleteEstructuraRecursive(leyId)
     .then(() => {
-      logger.info(`Estructura de la ley actualizada con éxito`);
-      res.status(201).send({
-        message: "Ley y estructura actualizadas con éxito",
-        id: leyId,
-      });
+      insertarEstructura(db, leyId, contenido, null, 0)
+        .then(() => {
+          logger.info(`Estructura de la ley ${leyId} actualizada con éxito`);
+          res.status(201).send({
+            message: "Ley y estructura actualizadas con éxito",
+            id: leyId,
+          });
+        })
+        .catch((err) => {
+          logger.error(
+            `Error al insertar la nueva estructura de la ley: ${err.message}`
+          );
+          res.status(500).send({
+            error:
+              "Error al actualizar la estructura de la ley: " + err.message,
+          });
+        });
     })
-    .catch((err) => {
+    .catch((deleteErr) => {
+      logger.error(
+        `Error al eliminar la estructura existente de la ley: ${deleteErr.message}`
+      );
       res.status(500).send({
-        error: "Error al actualizar la estructura de la ley: " + err.message,
+        error:
+          "Error al eliminar la estructura de la ley: " + deleteErr.message,
       });
     });
 }
 
+async function deleteEstructuraRecursive(leyId) {
+  try {
+    const childrenSql =
+      "SELECT id FROM EstructuraLeyes WHERE parent_id IN (SELECT id FROM EstructuraLeyes WHERE ley_id = ?)";
+    const [children] = await db.promise().query(childrenSql, [leyId]);
+    if (children.length > 0) {
+      await Promise.all(
+        children.map((child) => deleteEstructuraRecursive(child.id))
+      );
+    }
+    const deleteSql = "DELETE FROM EstructuraLeyes WHERE ley_id = ?";
+    await db.promise().query(deleteSql, [leyId]);
+  } catch (error) {
+    logger.error(
+      `Error al eliminar estructura de ley recursivamente: ${error.message}`
+    );
+    throw error;
+  }
+}
+
+function insertarEstructura(db, leyId, elementos, parentId = null, nivel = 0) {
+  // Convertir cada iteración en una promesa y usar Promise.all para asegurar que todas las promesas se resuelvan antes de continuar
+  return Promise.all(
+    elementos.map(async (elemento) => {
+      const { tipo, texto, children } = elemento;
+      const sql =
+        "INSERT INTO EstructuraLeyes (ley_id, parent_id, tipo, contenido, nivel) VALUES (?, ?, ?, ?, ?)";
+      try {
+        const [result] = await db
+          .promise()
+          .query(sql, [leyId, parentId, tipo, texto, nivel]);
+        const newParentId = result.insertId;
+        if (children && children.length > 0) {
+          return insertarEstructura(
+            db,
+            leyId,
+            children,
+            newParentId,
+            nivel + 1
+          ); // Incremento del nivel para sub-elementos
+        }
+      } catch (error) {
+        logger.error(
+          `Error al insertar estructura de la ley: ${error.message}`
+        );
+        throw error; // Propagación del error para manejo centralizado
+      }
+    })
+  );
+}
+
 exports.getAllLeyes = async (req, res) => {
   const sql = `
-    SELECT el.id, el.ley_id, el.parent_id, el.tipo, el.contenido, l.nombre as ley_nombre, l.url
-    FROM EstructuraLeyes el
-    JOIN Leyes l ON el.ley_id = l.id
-    ORDER BY el.ley_id, el.parent_id, el.id;
+    SELECT id, nombre, url
+    FROM Leyes
+    ORDER BY id;
   `;
 
   try {
     const [results] = await db.promise().query(sql);
-    const leyes = buildHierarchy(results);
-    res.status(200).send(leyes);
+    res.status(200).send(results);
   } catch (err) {
     logger.error(`Error al obtener las leyes: ${err.message}`);
     res
@@ -171,6 +214,89 @@ exports.updateLey = (req, res) => {
     }
   });
 };
+
+function buildHierarchy(elements) {
+  let nodeMap = {};
+  let rootElements = [];
+  let lastRootNode = null;
+
+  elements.forEach((element) => {
+    element.children = [];
+    nodeMap[element.id] = element;
+
+    if (element.parent_id) {
+      if (nodeMap[element.parent_id]) {
+        nodeMap[element.parent_id].children.push(element);
+      }
+    } else {
+      // Manejo especial para elementos con parent_id NULL que no son raíz
+      if (lastRootNode) {
+        lastRootNode.children.push(element);
+      } else {
+        rootElements.push(element);
+        lastRootNode = element; // Actualizar el último nodo raíz encontrado
+      }
+    }
+  });
+
+  return rootElements;
+}
+
+exports.getLey = async (req, res) => {
+  const { id } = req.params; // ID de la ley a buscar
+
+  try {
+    // Consulta para obtener todos los elementos de la estructura de la ley, ordenados por nivel y parent_id
+    const query = `
+      SELECT * FROM EstructuraLeyes WHERE ley_id = ? ORDER BY nivel ASC, parent_id ASC, id ASC
+    `;
+    const [elements] = await db.promise().query(query, [id]);
+
+    if (elements.length === 0) {
+      return res
+        .status(404)
+        .send({ message: "No se encontró la ley con el ID proporcionado" });
+    }
+
+    // Función para reconstruir la jerarquía
+    const leyStructure = buildHierarchy(elements);
+
+    res.status(200).json({
+      leyId: id,
+      estructura: leyStructure,
+    });
+  } catch (error) {
+    console.error(
+      `Error al recuperar la estructura de la ley: ${error.message}`
+    );
+    res.status(500).send({
+      error: "Error al recuperar la estructura de la ley: " + error.message,
+    });
+  }
+};
+
+function buildHierarchy(elements) {
+  const nodeMap = {};
+  const rootElements = [];
+
+  elements.forEach((element) => {
+    const { id, parent_id, tipo, contenido } = element;
+    if (!nodeMap[id]) {
+      nodeMap[id] = { id, tipo, contenido, children: [] };
+    }
+
+    if (parent_id) {
+      if (!nodeMap[parent_id]) {
+        nodeMap[parent_id] = { children: [] };
+      }
+      nodeMap[parent_id].children.push(nodeMap[id]);
+    } else {
+      rootElements.push(nodeMap[id]);
+    }
+  });
+
+  return rootElements;
+}
 
 async function deleteEstructuraRecursive(leyId) {
   let hasMore = true;
