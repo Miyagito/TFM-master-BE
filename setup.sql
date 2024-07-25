@@ -6,7 +6,12 @@ USE MiAppTemarios;
 CREATE TABLE IF NOT EXISTS Leyes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(255),
-    url VARCHAR(255)
+    url VARCHAR(255),
+    seccion VARCHAR(255),
+    departamento VARCHAR(255),
+    referencia VARCHAR(255),
+    permalink VARCHAR(255),
+    publicadoEn VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS EstructuraLeyes (
@@ -15,6 +20,7 @@ CREATE TABLE IF NOT EXISTS EstructuraLeyes (
     parent_id INT,
     tipo VARCHAR(255),
     contenido TEXT,
+    nivel INT
     FOREIGN KEY (ley_id) REFERENCES Leyes(id)
     ON DELETE CASCADE
 );

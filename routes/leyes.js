@@ -6,7 +6,7 @@ const authenticateToken = require("../middleware/authenticateToken");
 const authorizeRoles = require("../middleware/authorizeRoles");
 
 router.get("/", leyesController.getAllLeyes);
-
+router.get("/:id", leyesController.getLey);
 router.post(
   "/",
   authenticateToken,

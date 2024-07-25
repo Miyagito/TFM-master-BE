@@ -6,65 +6,106 @@ async function scrapeBOE(url) {
   await page.goto(url, { waitUntil: "networkidle2" });
 
   try {
-    const waitForSelectorIgnoreError = async (selector) => {
-      try {
-        await page.waitForSelector(selector, { visible: true });
-      } catch (error) {
-        return null; // Devuelve null en caso de error
-      }
-    };
-
-    await Promise.race([
-      waitForSelectorIgnoreError(".documento-tit"),
-      waitForSelectorIgnoreError(".documento-subtit"),
-      waitForSelectorIgnoreError(
-        'a[target="_blank"][title="Abre el PDF en una nueva ventana"]'
-      ),
-    ]);
-
-    const isLoaded = await page.evaluate(() => {
-      const tit = document.querySelector(".documento-tit");
-      const subtit = document.querySelector(".documento-subtit");
-      const pdfLink = document.querySelector(
-        'a[target="_blank"][title="Abre el PDF en una nueva ventana"]'
-      );
-      return !!tit || !!subtit || !!pdfLink; // Devuelve true si alguno existe
-    });
-
-    if (!isLoaded) {
-      throw new Error("Ningún elemento necesario se cargó correctamente.");
-    }
-
-    // Extraer el nombre de la ley y su estructura documental
     const ley = await page.evaluate(() => {
-      const nombreLey = document.querySelector(".documento-tit")?.innerText;
+      const tituloElement = document.querySelector(".documento-tit");
+      const nombreLey = tituloElement
+        ? tituloElement.firstChild.textContent.trim()
+        : "";
       const estructura = [];
+      const stack = [];
+
+      // Función para encontrar el texto correspondiente a un dt específico
+      const getTextForDt = (dtText) => {
+        const dtElement = Array.from(document.querySelectorAll("dt")).find(
+          (dt) => dt.textContent.trim() === dtText
+        );
+        if (dtElement) {
+          const ddElement = dtElement.nextElementSibling;
+          return ddElement ? ddElement.textContent.trim() : "No disponible";
+        }
+        return "No disponible";
+      };
+
+      // Función para encontrar el href correspondiente a un dt específico
+      const getHrefForDt = (dtText) => {
+        const dtElement = Array.from(document.querySelectorAll("dt")).find(
+          (dt) => dt.textContent.trim() === dtText
+        );
+        if (dtElement) {
+          const ddElement = dtElement.nextElementSibling;
+          const aElement = ddElement ? ddElement.querySelector("a") : null;
+          return aElement ? aElement.href : "No disponible";
+        }
+        return "No disponible";
+      };
+
+      const publicadoEn = getTextForDt("Publicado en:");
+      const seccion = getTextForDt("Sección:");
+      const departamento = getTextForDt("Departamento:");
+      const referencia = getTextForDt("Referencia:");
+      const permalink = getHrefForDt("Permalink ELI:");
+      // Asegurarse de capturar elementos del preámbulo correctamente
       const elementos = document.querySelectorAll(
-        ".titulo, .titulo_num, .titulo_tit, .capitulo_num, .capitulo_tit, .articulo"
+        "#DOdocText h4, #DOdocText .centro_redonda, #DOdocText p:not(.centro_redonda), .titulo, .titulo_num, .titulo_tit, .capitulo_num, .capitulo_tit, .articulo"
       );
 
       elementos.forEach((elemento) => {
-        const tipo = elemento.className;
-        const texto = elemento.innerText;
-        const contenido = [];
+        const tipo = elemento.matches("#DOdocText h4")
+          ? "titulo_preambulo"
+          : elemento.matches("#DOdocText .centro_redonda")
+          ? "centro_redonda"
+          : elemento.matches("#DOdocText p")
+          ? "parrafo"
+          : elemento.className || "parrafo";
 
-        let siguienteElemento = elemento.nextElementSibling;
-        while (
-          siguienteElemento &&
-          (siguienteElemento.className === "parrafo" ||
-            siguienteElemento.className === "parrafo_2")
-        ) {
-          contenido.push({
-            tipo: siguienteElemento.className,
-            texto: siguienteElemento.innerText,
-          });
-          siguienteElemento = siguienteElemento.nextElementSibling;
+        const texto = elemento.innerText;
+        const nuevoElemento = { tipo, texto, children: [] };
+
+        function debeSerHijo(parentType, childType) {
+          const hierarchy = {
+            preambulo: ["titulo_preambulo", "centro_redonda", "parrafo"],
+            titulo_preambulo: ["centro_redonda", "parrafo"],
+            centro_redonda: ["parrafo"],
+            titulo: ["articulo", "capitulo_num", "capitulo_tit"],
+            titulo_num: [
+              "capitulo_num",
+              "titulo_tit",
+              "capitulo_tit",
+              "articulo",
+            ],
+            capitulo_num: ["capitulo_tit", "articulo"],
+            capitulo_tit: ["articulo"],
+            articulo: ["parrafo", "parrafo_2"],
+          };
+          return hierarchy[parentType]?.includes(childType);
         }
 
-        estructura.push({ tipo, texto, contenido });
+        while (
+          stack.length > 0 &&
+          !debeSerHijo(stack[stack.length - 1].tipo, tipo)
+        ) {
+          stack.pop();
+        }
+
+        if (stack.length > 0) {
+          stack[stack.length - 1].children.push(nuevoElemento);
+        } else {
+          estructura.push(nuevoElemento);
+        }
+        stack.push(nuevoElemento);
       });
 
-      return { nombreLey, estructura }; // Devolver tanto el nombre como la estructura
+      return {
+        nombreLey,
+        estructura,
+        metadatos: {
+          seccion,
+          departamento,
+          referencia,
+          permalink,
+          publicadoEn,
+        },
+      };
     });
 
     await browser.close();
