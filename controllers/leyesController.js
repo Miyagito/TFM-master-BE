@@ -2,7 +2,9 @@ const db = require("../db");
 const logger = require("../logs/loggers");
 
 exports.addLey = (req, res) => {
-  const { nombre, url, contenido } = req.body;
+  const { nombre, url, contenido, metadatos } = req.body;
+  const { publicadoEn, seccion, departamento, referencia, permalink } =
+    metadatos;
 
   // Verificar si la ley ya existe
   const sqlExist = "SELECT id FROM Leyes WHERE nombre = ?";
@@ -17,31 +19,49 @@ exports.addLey = (req, res) => {
     }
 
     if (results.length > 0) {
-      // La ley ya existe, actualizar la URL y su estructura
+      // La ley ya existe, actualizar la URL y sus metadatos
       const leyId = results[0].id;
-      const sqlUpdate = "UPDATE Leyes SET url = ? WHERE id = ?";
-      db.query(sqlUpdate, [url, leyId], (err) => {
-        if (err) {
-          logger.error(`Error al actualizar la ley: ${err.message}`);
-          return res
-            .status(500)
-            .send({ error: "Error al actualizar la ley: " + err.message });
+      const sqlUpdate =
+        "UPDATE Leyes SET url = ?, publicadoEn = ?, seccion = ?, departamento = ?, referencia = ?, permalink = ? WHERE id = ?";
+      db.query(
+        sqlUpdate,
+        [url, publicadoEn, seccion, departamento, referencia, permalink, leyId],
+        (err) => {
+          if (err) {
+            logger.error(`Error al actualizar la ley: ${err.message}`);
+            return res
+              .status(500)
+              .send({ error: "Error al actualizar la ley: " + err.message });
+          }
+          updateEstructuraLey(leyId, contenido, res); // Actualizar la estructura de la ley
         }
-        updateEstructuraLey(leyId, contenido, res); // Actualizar la estructura de la ley
-      });
+      );
     } else {
       // La ley no existe, insertar nueva ley
-      const sqlInsert = "INSERT INTO Leyes (nombre, url) VALUES (?, ?)";
-      db.query(sqlInsert, [nombre, url], (err, result) => {
-        if (err) {
-          logger.error(`Error al añadir la ley: ${err.message}`);
-          return res
-            .status(500)
-            .send({ error: "Error al añadir la ley: " + err.message });
+      const sqlInsert =
+        "INSERT INTO Leyes (nombre, url, publicadoEn, seccion, departamento, referencia, permalink) VALUES (?, ?, ?, ?, ?, ?)";
+      db.query(
+        sqlInsert,
+        [
+          nombre,
+          url,
+          publicadoEn,
+          seccion,
+          departamento,
+          referencia,
+          permalink,
+        ],
+        (err, result) => {
+          if (err) {
+            logger.error(`Error al añadir la ley: ${err.message}`);
+            return res
+              .status(500)
+              .send({ error: "Error al añadir la ley: " + err.message });
+          }
+          const leyId = result.insertId;
+          updateEstructuraLey(leyId, contenido, res); // Insertar la nueva estructura de la ley
         }
-        const leyId = result.insertId;
-        updateEstructuraLey(leyId, contenido, res); // Insertar la nueva estructura de la ley
-      });
+      );
     }
   });
 };
@@ -131,10 +151,10 @@ function insertarEstructura(db, leyId, elementos, parentId = null, nivel = 0) {
 
 exports.getAllLeyes = async (req, res) => {
   const sql = `
-    SELECT id, nombre, url
-    FROM Leyes
-    ORDER BY id;
-  `;
+  SELECT id, nombre, url, publicadoEn, seccion, departamento, referencia, permalink
+  FROM Leyes
+  ORDER BY id;
+`;
 
   try {
     const [results] = await db.promise().query(sql);

@@ -14,6 +14,36 @@ async function scrapeBOE(url) {
       const estructura = [];
       const stack = [];
 
+      // Función para encontrar el texto correspondiente a un dt específico
+      const getTextForDt = (dtText) => {
+        const dtElement = Array.from(document.querySelectorAll("dt")).find(
+          (dt) => dt.textContent.trim() === dtText
+        );
+        if (dtElement) {
+          const ddElement = dtElement.nextElementSibling;
+          return ddElement ? ddElement.textContent.trim() : "No disponible";
+        }
+        return "No disponible";
+      };
+
+      // Función para encontrar el href correspondiente a un dt específico
+      const getHrefForDt = (dtText) => {
+        const dtElement = Array.from(document.querySelectorAll("dt")).find(
+          (dt) => dt.textContent.trim() === dtText
+        );
+        if (dtElement) {
+          const ddElement = dtElement.nextElementSibling;
+          const aElement = ddElement ? ddElement.querySelector("a") : null;
+          return aElement ? aElement.href : "No disponible";
+        }
+        return "No disponible";
+      };
+
+      const publicadoEn = getTextForDt("Publicado en:");
+      const seccion = getTextForDt("Sección:");
+      const departamento = getTextForDt("Departamento:");
+      const referencia = getTextForDt("Referencia:");
+      const permalink = getHrefForDt("Permalink ELI:");
       // Asegurarse de capturar elementos del preámbulo correctamente
       const elementos = document.querySelectorAll(
         "#DOdocText h4, #DOdocText .centro_redonda, #DOdocText p:not(.centro_redonda), .titulo, .titulo_num, .titulo_tit, .capitulo_num, .capitulo_tit, .articulo"
@@ -65,7 +95,17 @@ async function scrapeBOE(url) {
         stack.push(nuevoElemento);
       });
 
-      return { nombreLey, estructura };
+      return {
+        nombreLey,
+        estructura,
+        metadatos: {
+          seccion,
+          departamento,
+          referencia,
+          permalink,
+          publicadoEn,
+        },
+      };
     });
 
     await browser.close();
