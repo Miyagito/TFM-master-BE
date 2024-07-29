@@ -39,7 +39,7 @@ exports.addLey = (req, res) => {
     } else {
       // La ley no existe, insertar nueva ley
       const sqlInsert =
-        "INSERT INTO Leyes (nombre, url, publicadoEn, seccion, departamento, referencia, permalink) VALUES (?, ?, ?, ?, ?, ?)";
+        "INSERT INTO Leyes (nombre, url, publicadoEn, seccion, departamento, referencia, permalink) VALUES (?, ?, ?, ?, ?, ?, ?)";
       db.query(
         sqlInsert,
         [
